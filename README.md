@@ -33,7 +33,7 @@ Nous avons :
 
 L’objectif final était d’obtenir une IA qui évalue intelligemment chaque position et joue de manière quasi-optimale.
 
-Vidéo de présentation (3 min 45 s) : [Lien YouTube — Démo complète](https://youtu.be/XXXXXXXXXXXX) (à remplacer par ton vrai lien)
+Vidéo de présentation  : Lien  https://drive.google.com/file/d/1LZH3pgYCETuEQhCLY2L5xhczSyPNOXVY/view?usp=drive_link
 
 ---
 
