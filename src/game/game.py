@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import joblib
 import numpy as np
@@ -376,34 +377,209 @@ with col_board:
             is_win_cell = (winner and win_line and i in win_line)
 
             if board[i] == 0 and not st.session_state.game_over:
-                # Case vide cliquable
-                if st.button(" ", key=f"b{i}"):
-                    if st.session_state.current_player == 'X' and not st.session_state.game_over:
-                        board[i] = 'X'
+                # Case vide cliquable — les deux joueurs cliquent à tour de rôle
+                can_click = True
+                # En mode IA, seul X (humain) peut cliquer
+                if mode != "vs Humain" and st.session_state.current_player == 'O':
+                    can_click = False
+
+                if can_click and st.button(" ", key=f"b{i}"):
+                    player = st.session_state.current_player
+                    board[i] = player
+                    next_player = 'O' if player == 'X' else 'X'
+                    st.session_state.turn += 1
+
+                    # Messages selon le joueur qui vient de jouer
+                    if player == 'X':
                         st.session_state.speech_x = "A TOI !"
-                        st.session_state.turn += 1
-                        w, wl = check_winner(board)
-                        if w:
-                            st.session_state.game_over = True
-                            st.session_state.winner_symbol = w
-                            st.session_state.winner_line = wl
+                    else:
+                        st.session_state.speech_o = "A TOI !"
+
+                    w, wl = check_winner(board)
+                    if w:
+                        st.session_state.game_over = True
+                        st.session_state.winner_symbol = w
+                        st.session_state.winner_line = wl
+                        if w == 'X':
                             st.session_state.speech_x = "VICTOIRE !!!"
                             st.session_state.speech_o = "IMPOSSIBLE..."
-                        elif is_full(board):
-                            st.session_state.game_over = True
-                            st.session_state.speech_x = "MATCH NUL ?"
-                            st.session_state.speech_o = "LA POULE EST NEUTRE."
                         else:
-                            st.session_state.current_player = 'O'
-                        st.rerun()
+                            st.session_state.speech_o = "VICTOIRE !!!"
+                            st.session_state.speech_x = "IMPOSSIBLE..."
+                    elif is_full(board):
+                        st.session_state.game_over = True
+                        st.session_state.speech_x = "MATCH NUL ?"
+                        st.session_state.speech_o = "LA POULE EST NEUTRE."
+                    else:
+                        st.session_state.current_player = next_player
+                    st.rerun()
+                elif not can_click:
+                    # Tour de l'IA — afficher case vide non cliquable
+                    st.button(" ", disabled=True, key=f"b{i}")
             else:
-                # Case remplie ou game over — affichage avec classe win-cell si gagnant
+                # Case remplie ou game over — bouton simple, animation appliquée via JS
                 label = "X" if board[i] == 'X' else ("O" if board[i] == 'O' else " ")
-                if is_win_cell:
-                    st.markdown('<div class="win-cell">', unsafe_allow_html=True)
                 st.button(label, disabled=True, key=f"b{i}")
-                if is_win_cell:
-                    st.markdown('</div>', unsafe_allow_html=True)
+
+# ====================== WIN ANIMATION VIA JS ======================
+# Ligne reliant les 3 cases gagnantes + confettis de victoire
+if winner and win_line:
+    win_line_list = list(win_line)
+    components.html(f"""
+    <script>
+    (function() {{
+        var winCells = {win_line_list};
+        var COLORS = ['#f0c000','#ff6b6b','#48dbfb','#ff9ff3','#feca57','#54a0ff','#5f27cd','#01a3a4','#ff4757','#2ed573'];
+
+        function run() {{
+            try {{
+                var doc = window.parent.document;
+                // Trouver le conteneur du board (la colonne centrale)
+                var allCols = doc.querySelectorAll('[data-testid="stHorizontalBlock"] [data-testid="stColumn"]');
+                // On cherche les boutons dans le board
+                var boardBtns = doc.querySelectorAll('[data-testid="stHorizontalBlock"] .stButton button');
+                if (!boardBtns || boardBtns.length < 9) return;
+
+                // Le board a 3 colonnes avec 3 boutons chacun
+                // L'ordre DOM est: col0(row0,row1,row2), col1(row0,row1,row2), col2(row0,row1,row2)
+                // winCells[i] = index 0-8 dans la grille (row-major: 0,1,2 / 3,4,5 / 6,7,8)
+                // DOM order: col_j contient les rows pour colonne j
+                // btn DOM index for grid cell i = (i%3)*3 + Math.floor(i/3)
+
+                function getDomIdx(gridIdx) {{
+                    return (gridIdx % 3) * 3 + Math.floor(gridIdx / 3);
+                }}
+
+                // Highlight les cases gagnantes
+                winCells.forEach(function(ci) {{
+                    var di = getDomIdx(ci);
+                    if (boardBtns[di]) {{
+                        boardBtns[di].style.animation = 'winPulse 0.5s ease-in-out infinite';
+                        boardBtns[di].style.borderColor = '#f0c000';
+                    }}
+                }});
+
+                // ====== LIGNE DE VICTOIRE ======
+                // Trouver les centres des 3 boutons gagnants
+                var centers = [];
+                winCells.forEach(function(ci) {{
+                    var di = getDomIdx(ci);
+                    var btn = boardBtns[di];
+                    if (btn) {{
+                        var r = btn.getBoundingClientRect();
+                        centers.push({{ x: r.left + r.width/2, y: r.top + r.height/2 }});
+                    }}
+                }});
+
+                if (centers.length === 3) {{
+                    // Supprimer ancienne ligne si elle existe
+                    var old = doc.getElementById('win-line-svg');
+                    if (old) old.remove();
+
+                    var svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                    svg.id = 'win-line-svg';
+                    svg.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;pointer-events:none;z-index:9999;';
+                    
+                    // Ligne principale dorée
+                    var line = doc.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    line.setAttribute('x1', centers[0].x);
+                    line.setAttribute('y1', centers[0].y);
+                    line.setAttribute('x2', centers[2].x);
+                    line.setAttribute('y2', centers[2].y);
+                    line.setAttribute('stroke', '#f0c000');
+                    line.setAttribute('stroke-width', '5');
+                    line.setAttribute('stroke-linecap', 'square');
+                    
+                    // Animation dessin de la ligne
+                    var len = Math.sqrt(Math.pow(centers[2].x-centers[0].x,2)+Math.pow(centers[2].y-centers[0].y,2));
+                    line.setAttribute('stroke-dasharray', len);
+                    line.setAttribute('stroke-dashoffset', len);
+                    line.style.animation = 'drawLine 0.4s ease-out forwards';
+
+                    // Ligne glow derrière
+                    var glow = doc.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    glow.setAttribute('x1', centers[0].x);
+                    glow.setAttribute('y1', centers[0].y);
+                    glow.setAttribute('x2', centers[2].x);
+                    glow.setAttribute('y2', centers[2].y);
+                    glow.setAttribute('stroke', '#f0c000');
+                    glow.setAttribute('stroke-width', '12');
+                    glow.setAttribute('stroke-linecap', 'square');
+                    glow.setAttribute('opacity', '0.3');
+                    glow.setAttribute('stroke-dasharray', len);
+                    glow.setAttribute('stroke-dashoffset', len);
+                    glow.style.animation = 'drawLine 0.4s ease-out forwards';
+
+                    svg.appendChild(glow);
+                    svg.appendChild(line);
+                    doc.body.appendChild(svg);
+
+                    // Ajouter le keyframe drawLine si pas déjà présent
+                    if (!doc.getElementById('win-line-style')) {{
+                        var style = doc.createElement('style');
+                        style.id = 'win-line-style';
+                        style.textContent = '@keyframes drawLine {{ to {{ stroke-dashoffset: 0; }} }} @keyframes confettiFall {{ 0% {{ opacity:1; transform: translateY(0) rotate(0deg); }} 100% {{ opacity:0; transform: translateY(120px) rotate(720deg); }} }} @keyframes confettiBurst {{ 0% {{ opacity:1; transform: scale(0) translate(0,0); }} 20% {{ opacity:1; transform: scale(1.2); }} 100% {{ opacity:0; transform: scale(0.5) translate(var(--tx), var(--ty)); }} }}';
+                        doc.head.appendChild(style);
+                    }}
+
+                    // ====== CONFETTIS ======
+                    setTimeout(function() {{
+                        var oldConf = doc.getElementById('confetti-container');
+                        if (oldConf) oldConf.remove();
+
+                        var container = doc.createElement('div');
+                        container.id = 'confetti-container';
+                        container.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;pointer-events:none;z-index:10000;overflow:hidden;';
+                        
+                        // Créer ~60 confettis
+                        for (var c = 0; c < 60; c++) {{
+                            var conf = doc.createElement('div');
+                            var size = 4 + Math.floor(Math.random() * 8);
+                            var startX = 10 + Math.random() * 80;
+                            var startY = Math.random() * 40;
+                            var color = COLORS[Math.floor(Math.random() * COLORS.length)];
+                            var tx = (Math.random() - 0.5) * 300;
+                            var ty = 100 + Math.random() * 400;
+                            var delay = Math.random() * 0.5;
+                            var dur = 1.5 + Math.random() * 2;
+                            
+                            conf.style.cssText = 'position:absolute;left:' + startX + '%;top:' + startY + '%;width:' + size + 'px;height:' + size + 'px;background:' + color + ';opacity:0;animation:confettiFall ' + dur + 's ease-out ' + delay + 's forwards;';
+                            // Pixel art style: pas de border-radius
+                            container.appendChild(conf);
+                        }}
+
+                        doc.body.appendChild(container);
+
+                        // Nettoyer après 5s
+                        setTimeout(function() {{
+                            if (container.parentNode) container.remove();
+                        }}, 5000);
+                    }}, 300);
+                }}
+
+            }} catch(e) {{ console.log('win anim error', e); }}
+        }}
+
+        setTimeout(run, 200);
+        setTimeout(run, 600);
+    }})();
+    </script>
+    """, height=0)
+else:
+    # Nettoyage des animations de victoire quand nouvelle partie
+    components.html("""
+    <script>
+    (function() {
+        try {
+            var doc = window.parent.document;
+            var svg = doc.getElementById('win-line-svg');
+            if (svg) svg.remove();
+            var conf = doc.getElementById('confetti-container');
+            if (conf) conf.remove();
+        } catch(e) {}
+    })();
+    </script>
+    """, height=0)
 
 with col_r:
     st.markdown(f"""
