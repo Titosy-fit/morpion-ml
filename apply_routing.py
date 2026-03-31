@@ -1,6 +1,28 @@
-import streamlit as st
-import streamlit.components.v1 as components
+import os
 
+game_file = r"e:\work\morpion-ml\src\game\game.py"
+with open(game_file, 'r', encoding='utf-8') as f:
+    lines = f.readlines()
+
+title_line_index = -1
+for i, line in enumerate(lines):
+    if "st.markdown('<div class=\"pixel-title\">MORPION BATTLE</div>" in line:
+        title_line_index = i
+        break
+
+if title_line_index == -1:
+    print("Could not find the target split line")
+    exit(1)
+
+top_lines = lines[:title_line_index]
+bottom_lines = lines[title_line_index:]
+
+new_code = []
+
+new_code.append("if 'app_state' not in st.session_state:\n")
+new_code.append("    st.session_state.app_state = 'loading'\n\n")
+
+functions = '''
 def render_splash():
     st.markdown("""
     <style>
@@ -94,19 +116,11 @@ def render_menu():
         if st.button("JOUER", key="btn_jouer"):
             st.session_state.app_state = 'game'
             st.rerun()
-        if st.button("QUITTER", key="btn_options"):
-            st.session_state.app_state = 'quit'
+        if st.button("OPTIONS", key="btn_options"):
+            st.session_state.app_state = 'options'
             st.rerun()
 
-def render_quit():
-    components.html("""
-    <script>
-    setTimeout(function() {
-        window.top.close();
-    }, 200);
-    </script>
-    """, height=0)
-
+def render_options():
     st.markdown("""
     <style>
     .options-wrapper {
@@ -114,7 +128,7 @@ def render_quit():
         min-height: 60vh; text-align: center; color: #f0d080; font-family: 'Press Start 2P', monospace;
     }
     .stButton button {
-        font-size: 14px !important; padding: 15px 30px !important; width: 250px !important; height: 50px !important;
+        font-size: 14px !important; padding: 15px 30px !important; width: 200px !important; height: 50px !important;
         background: #5a3a10 !important; border: 4px solid #c8900a !important; color: #f0d080 !important;
         border-radius: 0 !important; font-family: 'Press Start 2P', monospace !important;
         transition: all 0.2s !important; display: block !important; margin: 30px auto 0 !important;
@@ -125,8 +139,8 @@ def render_quit():
     .stButton { justify-content: center; }
     </style>
     <div class="options-wrapper">
-        <h2 style="font-size: 24px; margin-bottom: 20px;">FIN DE PARTIE</h2>
-        <p style="font-size: 12px; color: #a08040;">L'onglet va se fermer automatiquement.<br><br>Si cela ne fonctionne pas, vous pouvez fermer cet onglet manuellement.</p>
+        <h2 style="font-size: 24px; margin-bottom: 20px;">OPTIONS</h2>
+        <p style="font-size: 12px; color: #a08040;">⚙️ En construction...</p>
     </div>
     """, unsafe_allow_html=True)
     
@@ -136,75 +150,25 @@ def render_quit():
             st.session_state.app_state = 'menu'
             st.rerun()
 
+# ====================== ROUTAGE ======================
+if st.session_state.app_state == 'loading':
+    render_splash()
+elif st.session_state.app_state == 'menu':
+    render_menu()
+elif st.session_state.app_state == 'options':
+    render_options()
+elif st.session_state.app_state == 'game':
+'''
+new_code.append(functions)
 
-def render_bg_animation(app_state):
-    if app_state in ['loading', 'menu']:
-        components.html("""
-        <script>
-        (function() {
-            var doc = window.parent.document;
-            if (doc.getElementById('bg-morpion-container')) return;
-            
-            var container = doc.createElement('div');
-            container.id = 'bg-morpion-container';
-            container.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:2;opacity:0.4;pointer-events:none;overflow:hidden;';
-            
-            function createGrid() {
-                if (!doc.getElementById('bg-morpion-container')) return;
-                var grid = doc.createElement('div');
-                var size = 80 + Math.random() * 60;
-                grid.style.cssText = 'position:absolute;width:'+size+'px;height:'+size+'px;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);gap:4px;background:#c8900a;border:4px solid #c8900a;opacity:0;transition:opacity 1s, transform 5s linear;transform:scale('+(0.6+Math.random()*0.8)+') rotate('+(Math.random()*40-20)+'deg);';
-                
-                grid.style.left = (Math.random() * 90) + '%';
-                grid.style.top = (Math.random() * 90) + '%';
-                container.appendChild(grid);
-                
-                var cells = [];
-                for(var i=0; i<9; i++){
-                    var cell = doc.createElement('div');
-                    cell.style.cssText = 'background:#1a0f08;display:flex;align-items:center;justify-content:center;font-family:"Press Start 2P",monospace;font-size:'+(size/4)+'px;';
-                    grid.appendChild(cell);
-                    cells.push(cell);
-                }
-                setTimeout(function(){ grid.style.opacity = '1'; grid.style.transform += ' translateY(-20px)'; }, 50);
-                
-                var turn = 0;
-                var symbols = ['X', 'O'];
-                var intv = setInterval(function() {
-                    var empty = cells.filter(c => c.innerHTML === '');
-                    if(empty.length === 0 || turn >= 9) {
-                        clearInterval(intv);
-                        grid.style.opacity = '0';
-                        setTimeout(function(){ grid.remove(); }, 1000);
-                        return;
-                    }
-                    var cell = empty[Math.floor(Math.random()*empty.length)];
-                    cell.innerHTML = symbols[turn%2];
-                    cell.style.color = symbols[turn%2] === 'X' ? '#c0392b' : '#27ae60';
-                    turn++;
-                }, 300 + Math.random()*400);
-            }
-            
-            createGrid(); createGrid(); createGrid();
-            
-            var spawnIntv = setInterval(function() {
-                if (!doc.getElementById('bg-morpion-container')) {
-                    clearInterval(spawnIntv); return;
-                }
-                createGrid();
-            }, 1200);
-            
-            var stMain = doc.querySelector('[data-testid="stMain"]');
-            if(stMain) stMain.appendChild(container);
-            else doc.body.appendChild(container);
-        })();
-        </script>
-        """, height=0)
+for line in bottom_lines:
+    if line.strip() == "":
+        new_code.append("\\n")
     else:
-        components.html("""
-        <script>
-        var doc = window.parent.document;
-        var bg = doc.getElementById('bg-morpion-container');
-        if (bg) bg.remove();
-        </script>
-        """, height=0)
+        new_code.append("    " + line)
+
+final_content = "".join(top_lines) + "".join(new_code)
+with open(game_file, "w", encoding='utf-8') as f:
+    f.write(final_content)
+
+print("Refactoring applied successfully.")

@@ -321,348 +321,403 @@ if 'board' not in st.session_state:
 board = st.session_state.board
 
 # ====================== TITLE ======================
-st.markdown('<div class="pixel-title">MORPION BATTLE</div>', unsafe_allow_html=True)
-st.markdown('<div class="pixel-subtitle">HACKATHON ML — MASTER 1 ISPM</div>', unsafe_allow_html=True)
+if 'app_state' not in st.session_state:
+    st.session_state.app_state = 'loading'
 
-# ====================== HUD TOP ======================
-st.markdown(f"""
-<div class="hud-bar">
-    <div class="hud-score">
-        <div class="hud-icon">X</div>
-        <span>{st.session_state.score_x}</span>
-    </div>
-    <div class="hud-turn">TOUR {st.session_state.turn}</div>
-    <div class="hud-score">
-        <div class="hud-icon" style="background:#2d8a4a;border-color:#1a5a2a;">O</div>
-        <span>{st.session_state.score_o}</span>
-    </div>
-</div>
-""", unsafe_allow_html=True)
 
-# ====================== MODE ======================
-mode = st.radio("",
-    ["vs Humain", "vs IA (ML)", "vs IA (Hybride)"],
-    horizontal=True,
-    label_visibility="collapsed"
-)
+from interface import render_splash, render_menu, render_quit, render_bg_animation
 
-# ====================== HP ======================
-hp_x_pct = max(0, 100 - st.session_state.score_o * 34)
-hp_o_pct = max(0, 100 - st.session_state.score_x * 50)
-hp_x_val = max(0, 3 - st.session_state.score_o)
-hp_o_val = max(0, 2 - st.session_state.score_x)
+render_bg_animation(st.session_state.app_state)
 
-# ====================== ARENA ======================
-col_l, col_board, col_r = st.columns([1.2, 2.5, 1.2])
+if st.session_state.app_state == 'loading':
+    render_splash()
+elif st.session_state.app_state == 'menu':
+    render_menu()
+elif st.session_state.app_state == 'quit':
+    render_quit()
+elif st.session_state.app_state == 'game':
+    st.markdown('<div class="pixel-title">MORPION BATTLE</div>', unsafe_allow_html=True)
+    st.markdown('<div class="pixel-subtitle">HACKATHON ML — MASTER 1 ISPM</div>', unsafe_allow_html=True)
 
-with col_l:
+
+    # ====================== HUD TOP ======================
     st.markdown(f"""
-    <div class="fighter-panel">
-        <div class="speech-bubble">{st.session_state.speech_x}</div>
-        <div class="fighter-sprite">🦆</div>
-        <div class="hp-wrap">
-            <div class="hp-label"><span>HP</span><span>{hp_x_val}/3</span></div>
-            <div class="hp-track"><div class="hp-fill-x" style="width:{hp_x_pct}%"></div></div>
+    <div class="hud-bar">
+        <div class="hud-score">
+            <div class="hud-icon">X</div>
+            <span>{st.session_state.score_x}</span>
         </div>
-        <div class="items-row"><div class="item-box"></div><div class="item-box"></div></div>
+        <div class="hud-turn">TOUR {st.session_state.turn}</div>
+        <div class="hud-score">
+            <div class="hud-icon" style="background:#2d8a4a;border-color:#1a5a2a;">O</div>
+            <span>{st.session_state.score_o}</span>
+        </div>
     </div>
     """, unsafe_allow_html=True)
 
-# ====================== PLATEAU (logique clics du Glow) ======================
-with col_board:
+
+    # ====================== MODE ======================
+    mode = st.radio("",
+        ["vs Humain", "vs IA (ML)", "vs IA (Hybride)"],
+        horizontal=True,
+        label_visibility="collapsed"
+    )
+
+
+    # ====================== HP ======================
+    hp_x_pct = max(0, 100 - st.session_state.score_o * 34)
+    hp_o_pct = max(0, 100 - st.session_state.score_x * 50)
+    hp_x_val = max(0, 3 - st.session_state.score_o)
+    hp_o_val = max(0, 2 - st.session_state.score_x)
+
+
+    # ====================== ARENA ======================
+    col_l, col_board, col_r = st.columns([1.2, 2.5, 1.2])
+
+
+    with col_l:
+        st.markdown(f"""
+        <div class="fighter-panel">
+            <div class="speech-bubble">{st.session_state.speech_x}</div>
+            <div class="fighter-sprite">🦆</div>
+            <div class="hp-wrap">
+                <div class="hp-label"><span>HP</span><span>{hp_x_val}/3</span></div>
+                <div class="hp-track"><div class="hp-fill-x" style="width:{hp_x_pct}%"></div></div>
+            </div>
+            <div class="items-row"><div class="item-box"></div><div class="item-box"></div></div>
+        </div>
+        """, unsafe_allow_html=True)
+
+
+    # ====================== PLATEAU (logique clics du Glow) ======================
+    with col_board:
+        winner, win_line = check_winner(board)
+        cols = st.columns(3)
+        for i in range(9):
+            with cols[i % 3]:
+                is_win_cell = (winner and win_line and i in win_line)
+
+
+                if board[i] == 0 and not st.session_state.game_over:
+                    # Case vide cliquable — les deux joueurs cliquent à tour de rôle
+                    can_click = True
+                    # En mode IA, seul X (humain) peut cliquer
+                    if mode != "vs Humain" and st.session_state.current_player == 'O':
+                        can_click = False
+
+
+                    if can_click and st.button(" ", key=f"b{i}"):
+                        player = st.session_state.current_player
+                        board[i] = player
+                        next_player = 'O' if player == 'X' else 'X'
+                        st.session_state.turn += 1
+
+
+                        # Messages selon le joueur qui vient de jouer
+                        if player == 'X':
+                            st.session_state.speech_x = "A TOI !"
+                        else:
+                            st.session_state.speech_o = "A TOI !"
+
+
+                        w, wl = check_winner(board)
+                        if w:
+                            st.session_state.game_over = True
+                            st.session_state.winner_symbol = w
+                            st.session_state.winner_line = wl
+                            if w == 'X':
+                                st.session_state.speech_x = "VICTOIRE !!!"
+                                st.session_state.speech_o = "IMPOSSIBLE..."
+                            else:
+                                st.session_state.speech_o = "VICTOIRE !!!"
+                                st.session_state.speech_x = "IMPOSSIBLE..."
+                        elif is_full(board):
+                            st.session_state.game_over = True
+                            st.session_state.speech_x = "MATCH NUL ?"
+                            st.session_state.speech_o = "LA POULE EST NEUTRE."
+                        else:
+                            st.session_state.current_player = next_player
+                        st.rerun()
+                    elif not can_click:
+                        # Tour de l'IA — afficher case vide non cliquable
+                        st.button(" ", disabled=True, key=f"b{i}")
+                else:
+                    # Case remplie ou game over — bouton simple, animation appliquée via JS
+                    label = "X" if board[i] == 'X' else ("O" if board[i] == 'O' else " ")
+                    st.button(label, disabled=True, key=f"b{i}")
+
+
+    # ====================== WIN ANIMATION VIA JS ======================
+    # Ligne reliant les 3 cases gagnantes + confettis de victoire
+    if winner and win_line:
+        win_line_list = list(win_line)
+        components.html(f"""
+        <script>
+        (function() {{
+            var winCells = {win_line_list};
+            var COLORS = ['#f0c000','#ff6b6b','#48dbfb','#ff9ff3','#feca57','#54a0ff','#5f27cd','#01a3a4','#ff4757','#2ed573'];
+
+
+            function run() {{
+                try {{
+                    var doc = window.parent.document;
+                    // Trouver le conteneur du board (la colonne centrale)
+                    var allCols = doc.querySelectorAll('[data-testid="stHorizontalBlock"] [data-testid="stColumn"]');
+                    // On cherche les boutons dans le board
+                    var boardBtns = doc.querySelectorAll('[data-testid="stHorizontalBlock"] .stButton button');
+                    if (!boardBtns || boardBtns.length < 9) return;
+
+
+                    // Le board a 3 colonnes avec 3 boutons chacun
+                    // L'ordre DOM est: col0(row0,row1,row2), col1(row0,row1,row2), col2(row0,row1,row2)
+                    // winCells[i] = index 0-8 dans la grille (row-major: 0,1,2 / 3,4,5 / 6,7,8)
+                    // DOM order: col_j contient les rows pour colonne j
+                    // btn DOM index for grid cell i = (i%3)*3 + Math.floor(i/3)
+
+
+                    function getDomIdx(gridIdx) {{
+                        return (gridIdx % 3) * 3 + Math.floor(gridIdx / 3);
+                    }}
+
+
+                    // Highlight les cases gagnantes
+                    winCells.forEach(function(ci) {{
+                        var di = getDomIdx(ci);
+                        if (boardBtns[di]) {{
+                            boardBtns[di].style.animation = 'winPulse 0.5s ease-in-out infinite';
+                            boardBtns[di].style.borderColor = '#f0c000';
+                        }}
+                    }});
+
+
+                    // ====== LIGNE DE VICTOIRE ======
+                    // Trouver les centres des 3 boutons gagnants
+                    var centers = [];
+                    winCells.forEach(function(ci) {{
+                        var di = getDomIdx(ci);
+                        var btn = boardBtns[di];
+                        if (btn) {{
+                            var r = btn.getBoundingClientRect();
+                            centers.push({{ x: r.left + r.width/2, y: r.top + r.height/2 }});
+                        }}
+                    }});
+
+
+                    if (centers.length === 3) {{
+                        // Supprimer ancienne ligne si elle existe
+                        var old = doc.getElementById('win-line-svg');
+                        if (old) old.remove();
+
+
+                        var svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                        svg.id = 'win-line-svg';
+                        svg.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;pointer-events:none;z-index:9999;';
+
+
+                        // Ligne principale dorée
+                        var line = doc.createElementNS('http://www.w3.org/2000/svg', 'line');
+                        line.setAttribute('x1', centers[0].x);
+                        line.setAttribute('y1', centers[0].y);
+                        line.setAttribute('x2', centers[2].x);
+                        line.setAttribute('y2', centers[2].y);
+                        line.setAttribute('stroke', '#f0c000');
+                        line.setAttribute('stroke-width', '5');
+                        line.setAttribute('stroke-linecap', 'square');
+
+
+                        // Animation dessin de la ligne
+                        var len = Math.sqrt(Math.pow(centers[2].x-centers[0].x,2)+Math.pow(centers[2].y-centers[0].y,2));
+                        line.setAttribute('stroke-dasharray', len);
+                        line.setAttribute('stroke-dashoffset', len);
+                        line.style.animation = 'drawLine 0.4s ease-out forwards';
+
+
+                        // Ligne glow derrière
+                        var glow = doc.createElementNS('http://www.w3.org/2000/svg', 'line');
+                        glow.setAttribute('x1', centers[0].x);
+                        glow.setAttribute('y1', centers[0].y);
+                        glow.setAttribute('x2', centers[2].x);
+                        glow.setAttribute('y2', centers[2].y);
+                        glow.setAttribute('stroke', '#f0c000');
+                        glow.setAttribute('stroke-width', '12');
+                        glow.setAttribute('stroke-linecap', 'square');
+                        glow.setAttribute('opacity', '0.3');
+                        glow.setAttribute('stroke-dasharray', len);
+                        glow.setAttribute('stroke-dashoffset', len);
+                        glow.style.animation = 'drawLine 0.4s ease-out forwards';
+
+
+                        svg.appendChild(glow);
+                        svg.appendChild(line);
+                        doc.body.appendChild(svg);
+
+
+                        // Ajouter le keyframe drawLine si pas déjà présent
+                        if (!doc.getElementById('win-line-style')) {{
+                            var style = doc.createElement('style');
+                            style.id = 'win-line-style';
+                            style.textContent = '@keyframes drawLine {{ to {{ stroke-dashoffset: 0; }} }} @keyframes confettiFall {{ 0% {{ opacity:1; transform: translateY(0) rotate(0deg); }} 100% {{ opacity:0; transform: translateY(120px) rotate(720deg); }} }} @keyframes confettiBurst {{ 0% {{ opacity:1; transform: scale(0) translate(0,0); }} 20% {{ opacity:1; transform: scale(1.2); }} 100% {{ opacity:0; transform: scale(0.5) translate(var(--tx), var(--ty)); }} }}';
+                            doc.head.appendChild(style);
+                        }}
+
+
+                        // ====== CONFETTIS ======
+                        setTimeout(function() {{
+                            var oldConf = doc.getElementById('confetti-container');
+                            if (oldConf) oldConf.remove();
+
+
+                            var container = doc.createElement('div');
+                            container.id = 'confetti-container';
+                            container.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;pointer-events:none;z-index:10000;overflow:hidden;';
+
+
+                            // Créer ~60 confettis
+                            for (var c = 0; c < 60; c++) {{
+                                var conf = doc.createElement('div');
+                                var size = 4 + Math.floor(Math.random() * 8);
+                                var startX = 10 + Math.random() * 80;
+                                var startY = Math.random() * 40;
+                                var color = COLORS[Math.floor(Math.random() * COLORS.length)];
+                                var tx = (Math.random() - 0.5) * 300;
+                                var ty = 100 + Math.random() * 400;
+                                var delay = Math.random() * 0.5;
+                                var dur = 1.5 + Math.random() * 2;
+
+
+                                conf.style.cssText = 'position:absolute;left:' + startX + '%;top:' + startY + '%;width:' + size + 'px;height:' + size + 'px;background:' + color + ';opacity:0;animation:confettiFall ' + dur + 's ease-out ' + delay + 's forwards;';
+                                // Pixel art style: pas de border-radius
+                                container.appendChild(conf);
+                            }}
+
+
+                            doc.body.appendChild(container);
+
+
+                            // Nettoyer après 5s
+                            setTimeout(function() {{
+                                if (container.parentNode) container.remove();
+                            }}, 5000);
+                        }}, 300);
+                    }}
+
+
+                }} catch(e) {{ console.log('win anim error', e); }}
+            }}
+
+
+            setTimeout(run, 200);
+            setTimeout(run, 600);
+        }})();
+        </script>
+        """, height=0)
+    else:
+        # Nettoyage des animations de victoire quand nouvelle partie
+        components.html("""
+        <script>
+        (function() {
+            try {
+                var doc = window.parent.document;
+                var svg = doc.getElementById('win-line-svg');
+                if (svg) svg.remove();
+                var conf = doc.getElementById('confetti-container');
+                if (conf) conf.remove();
+            } catch(e) {}
+        })();
+        </script>
+        """, height=0)
+
+
+    with col_r:
+        st.markdown(f"""
+        <div class="fighter-panel">
+            <div class="speech-bubble">{st.session_state.speech_o}</div>
+            <div class="fighter-sprite">🐔</div>
+            <div class="hp-wrap">
+                <div class="hp-label"><span>HP</span><span>{hp_o_val}/2</span></div>
+                <div class="hp-track"><div class="hp-fill-o" style="width:{hp_o_pct}%"></div></div>
+            </div>
+            <div class="items-row"><div class="item-box"></div><div class="item-box"></div></div>
+        </div>
+        """, unsafe_allow_html=True)
+
+
+    # ====================== BOTTOM HUD ======================
+    st.markdown(f"""
+    <div class="bottom-hud">
+        <div class="bottom-hp-group">
+            <span style="font-size:10px;">🦆</span>
+            <div class="bottom-hp-bar"><div style="height:100%;width:{hp_x_pct}%;background:#c0392b;"></div></div>
+            <span style="font-size:7px;color:#fff;font-family:'Press Start 2P',monospace;">{hp_x_val}/3</span>
+        </div>
+        <div class="bottom-center-btn">▶</div>
+        <div class="bottom-hp-group">
+            <span style="font-size:7px;color:#fff;font-family:'Press Start 2P',monospace;">{hp_o_val}/2</span>
+            <div class="bottom-hp-bar"><div style="height:100%;width:{hp_o_pct}%;background:#27ae60;"></div></div>
+            <span style="font-size:10px;">🐔</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+    # ====================== LOGIQUE IA — après affichage (pattern Glow) ======================
     winner, win_line = check_winner(board)
-    cols = st.columns(3)
-    for i in range(9):
-        with cols[i % 3]:
-            is_win_cell = (winner and win_line and i in win_line)
+    full = is_full(board)
 
-            if board[i] == 0 and not st.session_state.game_over:
-                # Case vide cliquable — les deux joueurs cliquent à tour de rôle
-                can_click = True
-                # En mode IA, seul X (humain) peut cliquer
-                if mode != "vs Humain" and st.session_state.current_player == 'O':
-                    can_click = False
 
-                if can_click and st.button(" ", key=f"b{i}"):
-                    player = st.session_state.current_player
-                    board[i] = player
-                    next_player = 'O' if player == 'X' else 'X'
+    ai_speeches = ["CALCUL EN COURS...", "LA POULE CHOISIT !", "MOUVEMENT OPTIMAL.", "JE VOIS TOUT.", "ALGORITHME ACTIVE."]
+
+
+    if not winner and not full and not st.session_state.game_over:
+        if mode in ["vs IA (ML)", "vs IA (Hybride)"] and st.session_state.current_player == 'O':
+            with st.spinner("IA reflechit..."):
+                time.sleep(0.3)
+                if mode == "vs IA (ML)":
+                    move = ml_best_move(board, 'O')
+                else:
+                    move = minimax_best_move(board, 'O')
+
+
+                if move is not None:
+                    board[move] = 'O'
+                    st.session_state.speech_o = random.choice(ai_speeches)
                     st.session_state.turn += 1
-
-                    # Messages selon le joueur qui vient de jouer
-                    if player == 'X':
-                        st.session_state.speech_x = "A TOI !"
-                    else:
-                        st.session_state.speech_o = "A TOI !"
-
                     w, wl = check_winner(board)
                     if w:
                         st.session_state.game_over = True
                         st.session_state.winner_symbol = w
                         st.session_state.winner_line = wl
-                        if w == 'X':
-                            st.session_state.speech_x = "VICTOIRE !!!"
-                            st.session_state.speech_o = "IMPOSSIBLE..."
-                        else:
-                            st.session_state.speech_o = "VICTOIRE !!!"
-                            st.session_state.speech_x = "IMPOSSIBLE..."
+                        st.session_state.speech_x = "NON !!!"
+                        st.session_state.speech_o = "LA POULE A PARLE !"
                     elif is_full(board):
                         st.session_state.game_over = True
                         st.session_state.speech_x = "MATCH NUL ?"
                         st.session_state.speech_o = "LA POULE EST NEUTRE."
                     else:
-                        st.session_state.current_player = next_player
+                        st.session_state.current_player = 'X'
                     st.rerun()
-                elif not can_click:
-                    # Tour de l'IA — afficher case vide non cliquable
-                    st.button(" ", disabled=True, key=f"b{i}")
-            else:
-                # Case remplie ou game over — bouton simple, animation appliquée via JS
-                label = "X" if board[i] == 'X' else ("O" if board[i] == 'O' else " ")
-                st.button(label, disabled=True, key=f"b{i}")
 
-# ====================== WIN ANIMATION VIA JS ======================
-# Ligne reliant les 3 cases gagnantes + confettis de victoire
-if winner and win_line:
-    win_line_list = list(win_line)
-    components.html(f"""
-    <script>
-    (function() {{
-        var winCells = {win_line_list};
-        var COLORS = ['#f0c000','#ff6b6b','#48dbfb','#ff9ff3','#feca57','#54a0ff','#5f27cd','#01a3a4','#ff4757','#2ed573'];
 
-        function run() {{
-            try {{
-                var doc = window.parent.document;
-                // Trouver le conteneur du board (la colonne centrale)
-                var allCols = doc.querySelectorAll('[data-testid="stHorizontalBlock"] [data-testid="stColumn"]');
-                // On cherche les boutons dans le board
-                var boardBtns = doc.querySelectorAll('[data-testid="stHorizontalBlock"] .stButton button');
-                if (!boardBtns || boardBtns.length < 9) return;
+    # ====================== RÉSULTAT ======================
+    winner, _ = check_winner(board)
+    full = is_full(board)
 
-                // Le board a 3 colonnes avec 3 boutons chacun
-                // L'ordre DOM est: col0(row0,row1,row2), col1(row0,row1,row2), col2(row0,row1,row2)
-                // winCells[i] = index 0-8 dans la grille (row-major: 0,1,2 / 3,4,5 / 6,7,8)
-                // DOM order: col_j contient les rows pour colonne j
-                // btn DOM index for grid cell i = (i%3)*3 + Math.floor(i/3)
 
-                function getDomIdx(gridIdx) {{
-                    return (gridIdx % 3) * 3 + Math.floor(gridIdx / 3);
-                }}
+    if winner == 'X':
+        st.session_state.score_x += 1
+        st.markdown('<div class="result-banner">X GAGNANT !</div>', unsafe_allow_html=True)
+    elif winner == 'O':
+        st.session_state.score_o += 1
+        st.markdown('<div class="result-banner">O GAGNANT !</div>', unsafe_allow_html=True)
+    elif full:
+        st.markdown('<div class="result-banner">MATCH NUL !</div>', unsafe_allow_html=True)
 
-                // Highlight les cases gagnantes
-                winCells.forEach(function(ci) {{
-                    var di = getDomIdx(ci);
-                    if (boardBtns[di]) {{
-                        boardBtns[di].style.animation = 'winPulse 0.5s ease-in-out infinite';
-                        boardBtns[di].style.borderColor = '#f0c000';
-                    }}
-                }});
 
-                // ====== LIGNE DE VICTOIRE ======
-                // Trouver les centres des 3 boutons gagnants
-                var centers = [];
-                winCells.forEach(function(ci) {{
-                    var di = getDomIdx(ci);
-                    var btn = boardBtns[di];
-                    if (btn) {{
-                        var r = btn.getBoundingClientRect();
-                        centers.push({{ x: r.left + r.width/2, y: r.top + r.height/2 }});
-                    }}
-                }});
-
-                if (centers.length === 3) {{
-                    // Supprimer ancienne ligne si elle existe
-                    var old = doc.getElementById('win-line-svg');
-                    if (old) old.remove();
-
-                    var svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
-                    svg.id = 'win-line-svg';
-                    svg.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;pointer-events:none;z-index:9999;';
-                    
-                    // Ligne principale dorée
-                    var line = doc.createElementNS('http://www.w3.org/2000/svg', 'line');
-                    line.setAttribute('x1', centers[0].x);
-                    line.setAttribute('y1', centers[0].y);
-                    line.setAttribute('x2', centers[2].x);
-                    line.setAttribute('y2', centers[2].y);
-                    line.setAttribute('stroke', '#f0c000');
-                    line.setAttribute('stroke-width', '5');
-                    line.setAttribute('stroke-linecap', 'square');
-                    
-                    // Animation dessin de la ligne
-                    var len = Math.sqrt(Math.pow(centers[2].x-centers[0].x,2)+Math.pow(centers[2].y-centers[0].y,2));
-                    line.setAttribute('stroke-dasharray', len);
-                    line.setAttribute('stroke-dashoffset', len);
-                    line.style.animation = 'drawLine 0.4s ease-out forwards';
-
-                    // Ligne glow derrière
-                    var glow = doc.createElementNS('http://www.w3.org/2000/svg', 'line');
-                    glow.setAttribute('x1', centers[0].x);
-                    glow.setAttribute('y1', centers[0].y);
-                    glow.setAttribute('x2', centers[2].x);
-                    glow.setAttribute('y2', centers[2].y);
-                    glow.setAttribute('stroke', '#f0c000');
-                    glow.setAttribute('stroke-width', '12');
-                    glow.setAttribute('stroke-linecap', 'square');
-                    glow.setAttribute('opacity', '0.3');
-                    glow.setAttribute('stroke-dasharray', len);
-                    glow.setAttribute('stroke-dashoffset', len);
-                    glow.style.animation = 'drawLine 0.4s ease-out forwards';
-
-                    svg.appendChild(glow);
-                    svg.appendChild(line);
-                    doc.body.appendChild(svg);
-
-                    // Ajouter le keyframe drawLine si pas déjà présent
-                    if (!doc.getElementById('win-line-style')) {{
-                        var style = doc.createElement('style');
-                        style.id = 'win-line-style';
-                        style.textContent = '@keyframes drawLine {{ to {{ stroke-dashoffset: 0; }} }} @keyframes confettiFall {{ 0% {{ opacity:1; transform: translateY(0) rotate(0deg); }} 100% {{ opacity:0; transform: translateY(120px) rotate(720deg); }} }} @keyframes confettiBurst {{ 0% {{ opacity:1; transform: scale(0) translate(0,0); }} 20% {{ opacity:1; transform: scale(1.2); }} 100% {{ opacity:0; transform: scale(0.5) translate(var(--tx), var(--ty)); }} }}';
-                        doc.head.appendChild(style);
-                    }}
-
-                    // ====== CONFETTIS ======
-                    setTimeout(function() {{
-                        var oldConf = doc.getElementById('confetti-container');
-                        if (oldConf) oldConf.remove();
-
-                        var container = doc.createElement('div');
-                        container.id = 'confetti-container';
-                        container.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;pointer-events:none;z-index:10000;overflow:hidden;';
-                        
-                        // Créer ~60 confettis
-                        for (var c = 0; c < 60; c++) {{
-                            var conf = doc.createElement('div');
-                            var size = 4 + Math.floor(Math.random() * 8);
-                            var startX = 10 + Math.random() * 80;
-                            var startY = Math.random() * 40;
-                            var color = COLORS[Math.floor(Math.random() * COLORS.length)];
-                            var tx = (Math.random() - 0.5) * 300;
-                            var ty = 100 + Math.random() * 400;
-                            var delay = Math.random() * 0.5;
-                            var dur = 1.5 + Math.random() * 2;
-                            
-                            conf.style.cssText = 'position:absolute;left:' + startX + '%;top:' + startY + '%;width:' + size + 'px;height:' + size + 'px;background:' + color + ';opacity:0;animation:confettiFall ' + dur + 's ease-out ' + delay + 's forwards;';
-                            // Pixel art style: pas de border-radius
-                            container.appendChild(conf);
-                        }}
-
-                        doc.body.appendChild(container);
-
-                        // Nettoyer après 5s
-                        setTimeout(function() {{
-                            if (container.parentNode) container.remove();
-                        }}, 5000);
-                    }}, 300);
-                }}
-
-            }} catch(e) {{ console.log('win anim error', e); }}
-        }}
-
-        setTimeout(run, 200);
-        setTimeout(run, 600);
-    }})();
-    </script>
-    """, height=0)
-else:
-    # Nettoyage des animations de victoire quand nouvelle partie
-    components.html("""
-    <script>
-    (function() {
-        try {
-            var doc = window.parent.document;
-            var svg = doc.getElementById('win-line-svg');
-            if (svg) svg.remove();
-            var conf = doc.getElementById('confetti-container');
-            if (conf) conf.remove();
-        } catch(e) {}
-    })();
-    </script>
-    """, height=0)
-
-with col_r:
-    st.markdown(f"""
-    <div class="fighter-panel">
-        <div class="speech-bubble">{st.session_state.speech_o}</div>
-        <div class="fighter-sprite">🐔</div>
-        <div class="hp-wrap">
-            <div class="hp-label"><span>HP</span><span>{hp_o_val}/2</span></div>
-            <div class="hp-track"><div class="hp-fill-o" style="width:{hp_o_pct}%"></div></div>
-        </div>
-        <div class="items-row"><div class="item-box"></div><div class="item-box"></div></div>
-    </div>
-    """, unsafe_allow_html=True)
-
-# ====================== BOTTOM HUD ======================
-st.markdown(f"""
-<div class="bottom-hud">
-    <div class="bottom-hp-group">
-        <span style="font-size:10px;">🦆</span>
-        <div class="bottom-hp-bar"><div style="height:100%;width:{hp_x_pct}%;background:#c0392b;"></div></div>
-        <span style="font-size:7px;color:#fff;font-family:'Press Start 2P',monospace;">{hp_x_val}/3</span>
-    </div>
-    <div class="bottom-center-btn">▶</div>
-    <div class="bottom-hp-group">
-        <span style="font-size:7px;color:#fff;font-family:'Press Start 2P',monospace;">{hp_o_val}/2</span>
-        <div class="bottom-hp-bar"><div style="height:100%;width:{hp_o_pct}%;background:#27ae60;"></div></div>
-        <span style="font-size:10px;">🐔</span>
-    </div>
-</div>
-""", unsafe_allow_html=True)
-
-# ====================== LOGIQUE IA — après affichage (pattern Glow) ======================
-winner, win_line = check_winner(board)
-full = is_full(board)
-
-ai_speeches = ["CALCUL EN COURS...", "LA POULE CHOISIT !", "MOUVEMENT OPTIMAL.", "JE VOIS TOUT.", "ALGORITHME ACTIVE."]
-
-if not winner and not full and not st.session_state.game_over:
-    if mode in ["vs IA (ML)", "vs IA (Hybride)"] and st.session_state.current_player == 'O':
-        with st.spinner("IA reflechit..."):
-            time.sleep(0.3)
-            if mode == "vs IA (ML)":
-                move = ml_best_move(board, 'O')
-            else:
-                move = minimax_best_move(board, 'O')
-
-            if move is not None:
-                board[move] = 'O'
-                st.session_state.speech_o = random.choice(ai_speeches)
-                st.session_state.turn += 1
-                w, wl = check_winner(board)
-                if w:
-                    st.session_state.game_over = True
-                    st.session_state.winner_symbol = w
-                    st.session_state.winner_line = wl
-                    st.session_state.speech_x = "NON !!!"
-                    st.session_state.speech_o = "LA POULE A PARLE !"
-                elif is_full(board):
-                    st.session_state.game_over = True
-                    st.session_state.speech_x = "MATCH NUL ?"
-                    st.session_state.speech_o = "LA POULE EST NEUTRE."
-                else:
-                    st.session_state.current_player = 'X'
+    if winner or full or st.session_state.game_over:
+        col1, col2, col3 = st.columns([1, 1, 1])
+        with col2:
+            st.markdown('<div class="action-btn">', unsafe_allow_html=True)
+            if st.button("NOUVELLE PARTIE", key="new_game"):
+                reset_board()
                 st.rerun()
-
-# ====================== RÉSULTAT ======================
-winner, _ = check_winner(board)
-full = is_full(board)
-
-if winner == 'X':
-    st.session_state.score_x += 1
-    st.markdown('<div class="result-banner">X GAGNANT !</div>', unsafe_allow_html=True)
-elif winner == 'O':
-    st.session_state.score_o += 1
-    st.markdown('<div class="result-banner">O GAGNANT !</div>', unsafe_allow_html=True)
-elif full:
-    st.markdown('<div class="result-banner">MATCH NUL !</div>', unsafe_allow_html=True)
-
-if winner or full or st.session_state.game_over:
-    col1, col2, col3 = st.columns([1, 1, 1])
-    with col2:
-        st.markdown('<div class="action-btn">', unsafe_allow_html=True)
-        if st.button("NOUVELLE PARTIE", key="new_game"):
-            reset_board()
-            st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
