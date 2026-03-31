@@ -476,7 +476,72 @@ def render_options():
             st.session_state.app_state = 'menu'
             st.rerun()
 
+def render_bg_animation():
+    components.html("""
+    <script>
+    (function() {
+        var doc = window.parent.document;
+        if (doc.getElementById('bg-morpion-container')) return;
+        
+        var container = doc.createElement('div');
+        container.id = 'bg-morpion-container';
+        container.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:2;opacity:0.4;pointer-events:none;overflow:hidden;';
+        
+        function createGrid() {
+            if (!doc.getElementById('bg-morpion-container')) return;
+            var grid = doc.createElement('div');
+            var size = 80 + Math.random() * 60;
+            grid.style.cssText = 'position:absolute;width:'+size+'px;height:'+size+'px;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);gap:4px;background:#c8900a;border:4px solid #c8900a;opacity:0;transition:opacity 1s, transform 5s linear;transform:scale('+(0.6+Math.random()*0.8)+') rotate('+(Math.random()*40-20)+'deg);';
+            
+            grid.style.left = (Math.random() * 90) + '%';
+            grid.style.top = (Math.random() * 90) + '%';
+            container.appendChild(grid);
+            
+            var cells = [];
+            for(var i=0; i<9; i++){
+                var cell = doc.createElement('div');
+                cell.style.cssText = 'background:#1a0f08;display:flex;align-items:center;justify-content:center;font-family:"Press Start 2P",monospace;font-size:'+(size/4)+'px;';
+                grid.appendChild(cell);
+                cells.push(cell);
+            }
+            setTimeout(function(){ grid.style.opacity = '1'; grid.style.transform += ' translateY(-20px)'; }, 50);
+            
+            var turn = 0;
+            var symbols = ['X', 'O'];
+            var intv = setInterval(function() {
+                var empty = cells.filter(c => c.innerHTML === '');
+                if(empty.length === 0 || turn >= 9) {
+                    clearInterval(intv);
+                    grid.style.opacity = '0';
+                    setTimeout(function(){ grid.remove(); }, 1000);
+                    return;
+                }
+                var cell = empty[Math.floor(Math.random()*empty.length)];
+                cell.innerHTML = symbols[turn%2];
+                cell.style.color = symbols[turn%2] === 'X' ? '#c0392b' : '#27ae60';
+                turn++;
+            }, 300 + Math.random()*400);
+        }
+        
+        createGrid(); createGrid(); createGrid();
+        
+        var spawnIntv = setInterval(function() {
+            if (!doc.getElementById('bg-morpion-container')) {
+                clearInterval(spawnIntv); return;
+            }
+            createGrid();
+        }, 1200);
+        
+        var stMain = doc.querySelector('[data-testid="stMain"]');
+        if(stMain) stMain.appendChild(container);
+        else doc.body.appendChild(container);
+    })();
+    </script>
+    """, height=0)
+
 # ====================== ROUTAGE ======================
+render_bg_animation()
+
 if st.session_state.app_state == 'loading':
     render_splash()
 elif st.session_state.app_state == 'menu':
@@ -485,7 +550,7 @@ elif st.session_state.app_state == 'options':
     render_options()
 elif st.session_state.app_state == 'game':
     st.markdown('<div class="pixel-title">MORPION BATTLE</div>', unsafe_allow_html=True)
-    st.markdown('<div class="pixel-subtitle">HACKATHON ML — MASTER 1 ISPM</div>', unsafe_allow_html=True)
+
 
     # ====================== SÉLECTEUR DE MANCHES ======================
     # Affiché seulement si le duel n'a pas commencé (scores = 0 et plateau vide)
@@ -544,7 +609,8 @@ elif st.session_state.app_state == 'game':
     mode = st.radio("",
         ["vs Humain", "vs IA (ML)", "vs IA (Hybride)"],
         horizontal=True,
-        label_visibility="collapsed"
+        label_visibility="collapsed",
+        disabled=duel_started
     )
 
     # ====================== HP ======================
