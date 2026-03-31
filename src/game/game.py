@@ -20,6 +20,7 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
     background: linear-gradient(180deg, #2a1a0e 0%, #4a2e18 45%, #1a0f08 100%) !important;
     color: #f0d080 !important;
     font-family: 'Press Start 2P', monospace !important;
+    overflow: hidden !important;
 }
 
 #MainMenu, footer, header, [data-testid="stToolbar"],
@@ -106,6 +107,15 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
 .hp-fill-o { height: 100%; background: #27ae60; }
 .items-row { display: flex; gap: 5px; margin-top: 8px; }
 .item-box { width: 20px; height: 20px; border: 2px solid #4a3020; background: #1a0f08; }
+
+/* ====== ROUND SELECTOR LABEL ====== */
+[data-testid="stRadio"] > label {
+    font-family: 'Press Start 2P', monospace !important;
+    font-size: 8px !important;
+    color: #f0d080 !important;
+    letter-spacing: 1px !important;
+    margin-bottom: 4px !important;
+}
 
 /* ====== RADIO ====== */
 .stRadio > div {
@@ -194,6 +204,9 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
 ::-webkit-scrollbar { width: 6px; background: #1a0f08; }
 ::-webkit-scrollbar-thumb { background: #4a3020; }
 div[data-baseweb="radio"] > div { gap: 6px !important; }
+
+/* ====== HIDDEN NEW GAME BUTTON (triggered via JS popup) ====== */
+#hidden-new-game { display: none !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -226,9 +239,8 @@ def load_or_train_models():
 
 model_win, model_draw = load_or_train_models()
 
-# ====================== FONCTIONS DU JEU (logique Glow) ======================
+# ====================== FONCTIONS DU JEU ======================
 def check_winner(board):
-    """Retourne (winner, win_line) ou (None, None) — identique au code Glow"""
     wins = [(0,1,2),(3,4,5),(6,7,8),(0,3,6),(1,4,7),(2,5,8),(0,4,8),(2,4,6)]
     for a, b, c in wins:
         if board[a] == board[b] == board[c] != 0:
@@ -245,7 +257,6 @@ def encode_board(board):
     return pd.DataFrame([features], columns=[f'c{i}_{p}' for i in range(9) for p in ['x', 'o']])
 
 def ml_best_move(board, player):
-    """ML : score = p_win - 0.5*(1 - p_draw), identique au code Glow"""
     if model_win is None:
         return minimax_best_move(board, player)
     best_score = -float('inf')
@@ -302,59 +313,232 @@ def minimax_best_move(board, player):
                 best_move = i
     return best_move
 
-# ====================== SESSION STATE (structure Glow) ======================
+# ====================== SESSION STATE ======================
 def reset_board():
+    """Réinitialise le plateau pour une nouvelle manche — conserve les scores du duel."""
     st.session_state.board = [0] * 9
     st.session_state.current_player = 'X'
     st.session_state.winner_line = None
     st.session_state.game_over = False
     st.session_state.winner_symbol = None
     st.session_state.turn = 1
+    st.session_state.score_counted = False
     st.session_state.speech_x = "PRET AU COMBAT !"
     st.session_state.speech_o = "LA POULE SACREE ME GUIDERA."
 
-if 'board' not in st.session_state:
-    reset_board()
+def reset_duel():
+    """Réinitialise tout : plateau + scores + manches."""
     st.session_state.score_x = 0
     st.session_state.score_o = 0
+    st.session_state.max_rounds = st.session_state.get('max_rounds', 3)
+    reset_board()
+
+if 'board' not in st.session_state:
+    st.session_state.score_x = 0
+    st.session_state.score_o = 0
+    st.session_state.max_rounds = 3
+    st.session_state.score_counted = False
+    reset_board()
 
 board = st.session_state.board
+max_rounds = st.session_state.get('max_rounds', 3)
+wins_to_win = (max_rounds + 1) // 2  # manches nécessaires pour gagner le duel
 
 # ====================== TITLE ======================
 if 'app_state' not in st.session_state:
     st.session_state.app_state = 'loading'
 
 
-from interface import render_splash, render_menu, render_quit, render_bg_animation
+def render_splash():
+    st.markdown("""
+    <style>
+    div[data-testid="stButton"] { display: none !important; }
+    .splash-wrapper {
+        position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        z-index: 50; pointer-events: none;
+        background: radial-gradient(circle at center, rgba(200, 144, 10, 0.4) 0%, transparent 60%);
+        animation: fadeIn 1s ease-in;
+    }
+    @keyframes fadeIn { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
+    .splash-logo {
+        font-family: 'Press Start 2P', monospace; font-size: 40px; color: #f0d080;
+        text-shadow: 4px 4px #000, -2px -2px #c8900a; margin-bottom: 40px; text-align: center; line-height: 1.5;
+    }
+    .loading-container { width: 300px; height: 20px; border: 3px solid #5a3a18; background: #1a0f08; position: relative; margin-bottom: 10px; }
+    .loading-bar { height: 100%; background: #c8900a; width: 0%; animation: loadBar 3s linear forwards; }
+    @keyframes loadBar { 0% { width: 0%; } 20% { width: 15%; } 50% { width: 45%; } 80% { width: 80%; } 100% { width: 100%; } }
+    .loading-text { font-family: 'Press Start 2P', monospace; font-size: 10px; color: #a08040; text-align: center; }
+    .loading-text::after { content: "Loading..."; animation: textChange 3s linear forwards; }
+    @keyframes textChange { 0% { content: "Loading."; } 33% { content: "Loading.."; } 66% { content: "Loading..."; } 99% { content: "Loading..."; } 100% { content: "Ready!"; color: #55ff55; } }
+    .particles {
+        position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+        background-image: radial-gradient(#f0d080 3px, transparent 3px), radial-gradient(#f0d080 2px, transparent 2px);
+        background-size: 60px 60px; background-position: 0 0, 30px 30px;
+        animation: particleMove 20s linear infinite; opacity: 0.15; z-index: -1;
+    }
+    @keyframes particleMove { 0% { background-position: 0 0, 30px 30px; } 100% { background-position: 600px 600px, 630px 630px; } }
+    </style>
+    <div class="splash-wrapper">
+        <div class="particles"></div>
+        <div class="splash-logo">MORPION<br>BATTLE</div>
+        <div class="loading-container"><div class="loading-bar"></div></div>
+        <div class="loading-text"></div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    if st.button("TransitionSplash", key="hidden_splash_btn"):
+        st.session_state.app_state = 'menu'
+        st.rerun()
 
-render_bg_animation(st.session_state.app_state)
+    components.html("""
+    <script>
+    setTimeout(function() {
+        var doc = window.parent.document;
+        // The text is "TransitionSplash" but Streamlit wraps it in <p>
+        var btns = Array.from(doc.querySelectorAll('button p')).filter(el => el.textContent === 'TransitionSplash');
+        if (btns.length > 0) {
+            btns[0].parentElement.click();
+        } else {
+            // fallback generic if structure changed
+            var allBtns = doc.querySelectorAll('button');
+            if(allBtns.length > 0) allBtns[0].click();
+        }
+    }, 3200);
+    </script>
+    """, height=0)
 
+
+def render_menu():
+    st.markdown("""
+    <style>
+    .menu-wrapper {
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        min-height: 50vh; animation: fadeIn 0.5s ease-out; margin-top: 10vh;
+    }
+    .menu-logo {
+        font-family: 'Press Start 2P', monospace; font-size: 50px; color: #f0d080;
+        text-shadow: 5px 5px #000, -2px -2px #c8900a; margin-bottom: 60px; text-align: center; line-height: 1.2;
+    }
+    .stButton button {
+        font-size: 16px !important; padding: 15px 30px !important; width: 250px !important; height: 60px !important;
+        background: #5a3a10 !important; border: 4px solid #c8900a !important; color: #f0d080 !important;
+        border-radius: 0 !important; font-family: 'Press Start 2P', monospace !important;
+        transition: all 0.2s !important; display: block !important; margin: 0 auto !important; line-height: 1.5 !important;
+    }
+    .stButton button:hover {
+        background: #7a5010 !important; transform: scale(1.05) !important;
+        box-shadow: 0 0 15px rgba(200, 144, 10, 0.6) !important; border-color: #f0d080 !important;
+    }
+    .stButton { justify-content: center; margin-bottom: 20px; }
+    </style>
+    <div class="menu-wrapper">
+        <div class="menu-logo">MORPION<br>BATTLE</div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        if st.button("JOUER", key="btn_jouer"):
+            st.session_state.app_state = 'game'
+            st.rerun()
+        if st.button("OPTIONS", key="btn_options"):
+            st.session_state.app_state = 'options'
+            st.rerun()
+
+def render_options():
+    st.markdown("""
+    <style>
+    .options-wrapper {
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        min-height: 60vh; text-align: center; color: #f0d080; font-family: 'Press Start 2P', monospace;
+    }
+    .stButton button {
+        font-size: 14px !important; padding: 15px 30px !important; width: 200px !important; height: 50px !important;
+        background: #5a3a10 !important; border: 4px solid #c8900a !important; color: #f0d080 !important;
+        border-radius: 0 !important; font-family: 'Press Start 2P', monospace !important;
+        transition: all 0.2s !important; display: block !important; margin: 30px auto 0 !important;
+    }
+    .stButton button:hover {
+        background: #7a5010 !important; border-color: #f0d080 !important;
+    }
+    .stButton { justify-content: center; }
+    </style>
+    <div class="options-wrapper">
+        <h2 style="font-size: 24px; margin-bottom: 20px;">OPTIONS</h2>
+        <p style="font-size: 12px; color: #a08040;">⚙️ En construction...</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        if st.button("RETOUR", key="btn_retour"):
+            st.session_state.app_state = 'menu'
+            st.rerun()
+
+# ====================== ROUTAGE ======================
 if st.session_state.app_state == 'loading':
     render_splash()
 elif st.session_state.app_state == 'menu':
     render_menu()
-elif st.session_state.app_state == 'quit':
-    render_quit()
+elif st.session_state.app_state == 'options':
+    render_options()
 elif st.session_state.app_state == 'game':
     st.markdown('<div class="pixel-title">MORPION BATTLE</div>', unsafe_allow_html=True)
     st.markdown('<div class="pixel-subtitle">HACKATHON ML — MASTER 1 ISPM</div>', unsafe_allow_html=True)
 
+    # ====================== SÉLECTEUR DE MANCHES ======================
+    # Affiché seulement si le duel n'a pas commencé (scores = 0 et plateau vide)
+    duel_started = (st.session_state.score_x > 0 or st.session_state.score_o > 0 or any(x != 0 for x in st.session_state.board))
 
-    # ====================== HUD TOP ======================
+    if not duel_started:
+        round_options = {"BO3": 3, "BO5": 5, "BO7": 7}
+        selected_label = st.radio(
+            "NOMBRE DE MANCHES",
+            list(round_options.keys()),
+            index=list(round_options.values()).index(st.session_state.get('max_rounds', 3)),
+            horizontal=True,
+            label_visibility="visible"
+        )
+        st.session_state.max_rounds = round_options[selected_label]
+        max_rounds = st.session_state.max_rounds
+        wins_to_win = (max_rounds + 1) // 2
+
+    # ====================== HUD TOP — victoires sous forme d'étoiles/icônes ======================
+    def render_wins(score, wins_needed, color_filled, color_empty):
+        icons = ""
+        for i in range(wins_needed):
+            if i < score:
+                icons += f'<span style="color:{color_filled};font-size:14px;text-shadow:0 0 6px {color_filled};">★</span>'
+            else:
+                icons += f'<span style="color:{color_empty};font-size:14px;">☆</span>'
+        return icons
+
+    stars_x = render_wins(st.session_state.score_x, wins_to_win, "#f0c000", "#3a2a10")
+    stars_o = render_wins(st.session_state.score_o, wins_to_win, "#f0c000", "#3a2a10")
+
     st.markdown(f"""
     <div class="hud-bar">
         <div class="hud-score">
-            <div class="hud-icon">X</div>
-            <span>{st.session_state.score_x}</span>
+            <div class="hud-icon">🦆</div>
+            <div style="display:flex;flex-direction:column;gap:2px;">
+                <span style="font-size:9px;color:#f0d080;">CANARD</span>
+                <div style="display:flex;gap:2px;">{stars_x}</div>
+            </div>
         </div>
-        <div class="hud-turn">TOUR {st.session_state.turn}</div>
-        <div class="hud-score">
-            <div class="hud-icon" style="background:#2d8a4a;border-color:#1a5a2a;">O</div>
-            <span>{st.session_state.score_o}</span>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:3px;">
+            <div class="hud-turn">MANCHE {st.session_state.turn}</div>
+            <div style="font-size:7px;color:#a08040;letter-spacing:1px;">BO{max_rounds} · {wins_to_win} VICTOIRE{'S' if wins_to_win > 1 else ''}</div>
+        </div>
+        <div class="hud-score" style="flex-direction:row-reverse;">
+            <div class="hud-icon" style="background:#2d8a4a;border-color:#1a5a2a;">🐔</div>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;">
+                <span style="font-size:9px;color:#f0d080;">POULE</span>
+                <div style="display:flex;gap:2px;">{stars_o}</div>
+            </div>
         </div>
     </div>
     """, unsafe_allow_html=True)
-
 
     # ====================== MODE ======================
     mode = st.radio("",
@@ -363,17 +547,14 @@ elif st.session_state.app_state == 'game':
         label_visibility="collapsed"
     )
 
-
     # ====================== HP ======================
-    hp_x_pct = max(0, 100 - st.session_state.score_o * 34)
-    hp_o_pct = max(0, 100 - st.session_state.score_x * 50)
-    hp_x_val = max(0, 3 - st.session_state.score_o)
-    hp_o_val = max(0, 2 - st.session_state.score_x)
-
+    hp_x_pct = max(0, int(100 * (1 - st.session_state.score_o / wins_to_win)))
+    hp_o_pct = max(0, int(100 * (1 - st.session_state.score_x / wins_to_win)))
+    hp_x_val = max(0, wins_to_win - st.session_state.score_o)
+    hp_o_val = max(0, wins_to_win - st.session_state.score_x)
 
     # ====================== ARENA ======================
     col_l, col_board, col_r = st.columns([1.2, 2.5, 1.2])
-
 
     with col_l:
         st.markdown(f"""
@@ -381,15 +562,14 @@ elif st.session_state.app_state == 'game':
             <div class="speech-bubble">{st.session_state.speech_x}</div>
             <div class="fighter-sprite">🦆</div>
             <div class="hp-wrap">
-                <div class="hp-label"><span>HP</span><span>{hp_x_val}/3</span></div>
+                <div class="hp-label"><span>HP</span><span>{hp_x_val}/{wins_to_win}</span></div>
                 <div class="hp-track"><div class="hp-fill-x" style="width:{hp_x_pct}%"></div></div>
             </div>
             <div class="items-row"><div class="item-box"></div><div class="item-box"></div></div>
         </div>
         """, unsafe_allow_html=True)
 
-
-    # ====================== PLATEAU (logique clics du Glow) ======================
+    # ====================== PLATEAU ======================
     with col_board:
         winner, win_line = check_winner(board)
         cols = st.columns(3)
@@ -397,14 +577,10 @@ elif st.session_state.app_state == 'game':
             with cols[i % 3]:
                 is_win_cell = (winner and win_line and i in win_line)
 
-
                 if board[i] == 0 and not st.session_state.game_over:
-                    # Case vide cliquable — les deux joueurs cliquent à tour de rôle
                     can_click = True
-                    # En mode IA, seul X (humain) peut cliquer
                     if mode != "vs Humain" and st.session_state.current_player == 'O':
                         can_click = False
-
 
                     if can_click and st.button(" ", key=f"b{i}"):
                         player = st.session_state.current_player
@@ -412,13 +588,10 @@ elif st.session_state.app_state == 'game':
                         next_player = 'O' if player == 'X' else 'X'
                         st.session_state.turn += 1
 
-
-                        # Messages selon le joueur qui vient de jouer
                         if player == 'X':
                             st.session_state.speech_x = "A TOI !"
                         else:
                             st.session_state.speech_o = "A TOI !"
-
 
                         w, wl = check_winner(board)
                         if w:
@@ -439,16 +612,14 @@ elif st.session_state.app_state == 'game':
                             st.session_state.current_player = next_player
                         st.rerun()
                     elif not can_click:
-                        # Tour de l'IA — afficher case vide non cliquable
                         st.button(" ", disabled=True, key=f"b{i}")
                 else:
-                    # Case remplie ou game over — bouton simple, animation appliquée via JS
                     label = "X" if board[i] == 'X' else ("O" if board[i] == 'O' else " ")
                     st.button(label, disabled=True, key=f"b{i}")
 
+    # ====================== WIN ANIMATION — CONFETTIS ONLY (no line) ======================
+    winner, win_line = check_winner(board)
 
-    # ====================== WIN ANIMATION VIA JS ======================
-    # Ligne reliant les 3 cases gagnantes + confettis de victoire
     if winner and win_line:
         win_line_list = list(win_line)
         components.html(f"""
@@ -457,30 +628,17 @@ elif st.session_state.app_state == 'game':
             var winCells = {win_line_list};
             var COLORS = ['#f0c000','#ff6b6b','#48dbfb','#ff9ff3','#feca57','#54a0ff','#5f27cd','#01a3a4','#ff4757','#2ed573'];
 
-
             function run() {{
                 try {{
                     var doc = window.parent.document;
-                    // Trouver le conteneur du board (la colonne centrale)
-                    var allCols = doc.querySelectorAll('[data-testid="stHorizontalBlock"] [data-testid="stColumn"]');
-                    // On cherche les boutons dans le board
                     var boardBtns = doc.querySelectorAll('[data-testid="stHorizontalBlock"] .stButton button');
                     if (!boardBtns || boardBtns.length < 9) return;
-
-
-                    // Le board a 3 colonnes avec 3 boutons chacun
-                    // L'ordre DOM est: col0(row0,row1,row2), col1(row0,row1,row2), col2(row0,row1,row2)
-                    // winCells[i] = index 0-8 dans la grille (row-major: 0,1,2 / 3,4,5 / 6,7,8)
-                    // DOM order: col_j contient les rows pour colonne j
-                    // btn DOM index for grid cell i = (i%3)*3 + Math.floor(i/3)
-
 
                     function getDomIdx(gridIdx) {{
                         return (gridIdx % 3) * 3 + Math.floor(gridIdx / 3);
                     }}
 
-
-                    // Highlight les cases gagnantes
+                    // Highlight winning cells
                     winCells.forEach(function(ci) {{
                         var di = getDomIdx(ci);
                         if (boardBtns[di]) {{
@@ -489,9 +647,7 @@ elif st.session_state.app_state == 'game':
                         }}
                     }});
 
-
-                    // ====== LIGNE DE VICTOIRE ======
-                    // Trouver les centres des 3 boutons gagnants
+                    // ====== LIGNE DE VICTOIRE SVG ======
                     var centers = [];
                     winCells.forEach(function(ci) {{
                         var di = getDomIdx(ci);
@@ -502,37 +658,17 @@ elif st.session_state.app_state == 'game':
                         }}
                     }});
 
-
                     if (centers.length === 3) {{
-                        // Supprimer ancienne ligne si elle existe
                         var old = doc.getElementById('win-line-svg');
                         if (old) old.remove();
-
 
                         var svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
                         svg.id = 'win-line-svg';
                         svg.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;pointer-events:none;z-index:9999;';
 
-
-                        // Ligne principale dorée
-                        var line = doc.createElementNS('http://www.w3.org/2000/svg', 'line');
-                        line.setAttribute('x1', centers[0].x);
-                        line.setAttribute('y1', centers[0].y);
-                        line.setAttribute('x2', centers[2].x);
-                        line.setAttribute('y2', centers[2].y);
-                        line.setAttribute('stroke', '#f0c000');
-                        line.setAttribute('stroke-width', '5');
-                        line.setAttribute('stroke-linecap', 'square');
-
-
-                        // Animation dessin de la ligne
                         var len = Math.sqrt(Math.pow(centers[2].x-centers[0].x,2)+Math.pow(centers[2].y-centers[0].y,2));
-                        line.setAttribute('stroke-dasharray', len);
-                        line.setAttribute('stroke-dashoffset', len);
-                        line.style.animation = 'drawLine 0.4s ease-out forwards';
 
-
-                        // Ligne glow derrière
+                        // Glow line behind
                         var glow = doc.createElementNS('http://www.w3.org/2000/svg', 'line');
                         glow.setAttribute('x1', centers[0].x);
                         glow.setAttribute('y1', centers[0].y);
@@ -546,65 +682,34 @@ elif st.session_state.app_state == 'game':
                         glow.setAttribute('stroke-dashoffset', len);
                         glow.style.animation = 'drawLine 0.4s ease-out forwards';
 
+                        // Main golden line
+                        var line = doc.createElementNS('http://www.w3.org/2000/svg', 'line');
+                        line.setAttribute('x1', centers[0].x);
+                        line.setAttribute('y1', centers[0].y);
+                        line.setAttribute('x2', centers[2].x);
+                        line.setAttribute('y2', centers[2].y);
+                        line.setAttribute('stroke', '#f0c000');
+                        line.setAttribute('stroke-width', '5');
+                        line.setAttribute('stroke-linecap', 'square');
+                        line.setAttribute('stroke-dasharray', len);
+                        line.setAttribute('stroke-dashoffset', len);
+                        line.style.animation = 'drawLine 0.4s ease-out forwards';
 
                         svg.appendChild(glow);
                         svg.appendChild(line);
                         doc.body.appendChild(svg);
 
-
-                        // Ajouter le keyframe drawLine si pas déjà présent
+                        // Add keyframes
                         if (!doc.getElementById('win-line-style')) {{
                             var style = doc.createElement('style');
                             style.id = 'win-line-style';
-                            style.textContent = '@keyframes drawLine {{ to {{ stroke-dashoffset: 0; }} }} @keyframes confettiFall {{ 0% {{ opacity:1; transform: translateY(0) rotate(0deg); }} 100% {{ opacity:0; transform: translateY(120px) rotate(720deg); }} }} @keyframes confettiBurst {{ 0% {{ opacity:1; transform: scale(0) translate(0,0); }} 20% {{ opacity:1; transform: scale(1.2); }} 100% {{ opacity:0; transform: scale(0.5) translate(var(--tx), var(--ty)); }} }}';
+                            style.textContent = '@keyframes drawLine {{ to {{ stroke-dashoffset: 0; }} }} @keyframes winPulse {{ 0% {{ border-color: #b8a070; background: #e8d8a8; }} 50% {{ border-color: #f0c000; background: #fff8c0; }} 100% {{ border-color: #b8a070; background: #e8d8a8; }} }} @keyframes confettiFall {{ 0% {{ opacity:1; transform: translateY(0) rotate(0deg); }} 100% {{ opacity:0; transform: translateY(120px) rotate(720deg); }} }}';
                             doc.head.appendChild(style);
                         }}
-
-
-                        // ====== CONFETTIS ======
-                        setTimeout(function() {{
-                            var oldConf = doc.getElementById('confetti-container');
-                            if (oldConf) oldConf.remove();
-
-
-                            var container = doc.createElement('div');
-                            container.id = 'confetti-container';
-                            container.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;pointer-events:none;z-index:10000;overflow:hidden;';
-
-
-                            // Créer ~60 confettis
-                            for (var c = 0; c < 60; c++) {{
-                                var conf = doc.createElement('div');
-                                var size = 4 + Math.floor(Math.random() * 8);
-                                var startX = 10 + Math.random() * 80;
-                                var startY = Math.random() * 40;
-                                var color = COLORS[Math.floor(Math.random() * COLORS.length)];
-                                var tx = (Math.random() - 0.5) * 300;
-                                var ty = 100 + Math.random() * 400;
-                                var delay = Math.random() * 0.5;
-                                var dur = 1.5 + Math.random() * 2;
-
-
-                                conf.style.cssText = 'position:absolute;left:' + startX + '%;top:' + startY + '%;width:' + size + 'px;height:' + size + 'px;background:' + color + ';opacity:0;animation:confettiFall ' + dur + 's ease-out ' + delay + 's forwards;';
-                                // Pixel art style: pas de border-radius
-                                container.appendChild(conf);
-                            }}
-
-
-                            doc.body.appendChild(container);
-
-
-                            // Nettoyer après 5s
-                            setTimeout(function() {{
-                                if (container.parentNode) container.remove();
-                            }}, 5000);
-                        }}, 300);
                     }}
-
 
                 }} catch(e) {{ console.log('win anim error', e); }}
             }}
-
 
             setTimeout(run, 200);
             setTimeout(run, 600);
@@ -612,21 +717,20 @@ elif st.session_state.app_state == 'game':
         </script>
         """, height=0)
     else:
-        # Nettoyage des animations de victoire quand nouvelle partie
+        # Cleanup on new game
         components.html("""
         <script>
         (function() {
             try {
                 var doc = window.parent.document;
-                var svg = doc.getElementById('win-line-svg');
-                if (svg) svg.remove();
                 var conf = doc.getElementById('confetti-container');
                 if (conf) conf.remove();
+                var overlay = doc.getElementById('game-over-popup');
+                if (overlay) overlay.remove();
             } catch(e) {}
         })();
         </script>
         """, height=0)
-
 
     with col_r:
         st.markdown(f"""
@@ -634,13 +738,12 @@ elif st.session_state.app_state == 'game':
             <div class="speech-bubble">{st.session_state.speech_o}</div>
             <div class="fighter-sprite">🐔</div>
             <div class="hp-wrap">
-                <div class="hp-label"><span>HP</span><span>{hp_o_val}/2</span></div>
+                <div class="hp-label"><span>HP</span><span>{hp_o_val}/{wins_to_win}</span></div>
                 <div class="hp-track"><div class="hp-fill-o" style="width:{hp_o_pct}%"></div></div>
             </div>
             <div class="items-row"><div class="item-box"></div><div class="item-box"></div></div>
         </div>
         """, unsafe_allow_html=True)
-
 
     # ====================== BOTTOM HUD ======================
     st.markdown(f"""
@@ -648,25 +751,22 @@ elif st.session_state.app_state == 'game':
         <div class="bottom-hp-group">
             <span style="font-size:10px;">🦆</span>
             <div class="bottom-hp-bar"><div style="height:100%;width:{hp_x_pct}%;background:#c0392b;"></div></div>
-            <span style="font-size:7px;color:#fff;font-family:'Press Start 2P',monospace;">{hp_x_val}/3</span>
+            <span style="font-size:7px;color:#fff;font-family:'Press Start 2P',monospace;">{hp_x_val}/{wins_to_win}</span>
         </div>
         <div class="bottom-center-btn">▶</div>
         <div class="bottom-hp-group">
-            <span style="font-size:7px;color:#fff;font-family:'Press Start 2P',monospace;">{hp_o_val}/2</span>
+            <span style="font-size:7px;color:#fff;font-family:'Press Start 2P',monospace;">{hp_o_val}/{wins_to_win}</span>
             <div class="bottom-hp-bar"><div style="height:100%;width:{hp_o_pct}%;background:#27ae60;"></div></div>
             <span style="font-size:10px;">🐔</span>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-
-    # ====================== LOGIQUE IA — après affichage (pattern Glow) ======================
+    # ====================== LOGIQUE IA ======================
     winner, win_line = check_winner(board)
     full = is_full(board)
 
-
     ai_speeches = ["CALCUL EN COURS...", "LA POULE CHOISIT !", "MOUVEMENT OPTIMAL.", "JE VOIS TOUT.", "ALGORITHME ACTIVE."]
-
 
     if not winner and not full and not st.session_state.game_over:
         if mode in ["vs IA (ML)", "vs IA (Hybride)"] and st.session_state.current_player == 'O':
@@ -676,7 +776,6 @@ elif st.session_state.app_state == 'game':
                     move = ml_best_move(board, 'O')
                 else:
                     move = minimax_best_move(board, 'O')
-
 
                 if move is not None:
                     board[move] = 'O'
@@ -697,27 +796,232 @@ elif st.session_state.app_state == 'game':
                         st.session_state.current_player = 'X'
                     st.rerun()
 
-
-    # ====================== RÉSULTAT ======================
+    # ====================== RÉSULTAT + POPUP ======================
     winner, _ = check_winner(board)
     full = is_full(board)
 
+    # Track score increment once per manche
+    if st.session_state.game_over and not st.session_state.get('score_counted', False):
+        if winner == 'X':
+            st.session_state.score_x += 1
+            st.session_state.score_counted = True
+        elif winner == 'O':
+            st.session_state.score_o += 1
+            st.session_state.score_counted = True
+        elif full:
+            st.session_state.score_counted = True
 
-    if winner == 'X':
-        st.session_state.score_x += 1
-        st.markdown('<div class="result-banner">X GAGNANT !</div>', unsafe_allow_html=True)
+    # Check if duel is won
+    duel_winner = None
+    if st.session_state.score_x >= wins_to_win:
+        duel_winner = 'X'
+    elif st.session_state.score_o >= wins_to_win:
+        duel_winner = 'O'
+
+    # Result messages
+    if duel_winner == 'X':
+        result_msg = "🦆 REMPORTE LE DUEL !"
+        result_emoji = "🦆"
+        result_color = "#c0392b"
+        result_sub = f"VICTOIRE EN {st.session_state.score_x} MANCHES"
+    elif duel_winner == 'O':
+        result_msg = "🐔 REMPORTE LE DUEL !"
+        result_emoji = "🐔"
+        result_color = "#27ae60"
+        result_sub = f"VICTOIRE EN {st.session_state.score_o} MANCHES"
+    elif winner == 'X':
+        result_msg = "MANCHE X !"
+        result_emoji = "🦆"
+        result_color = "#c0392b"
+        result_sub = f"SCORE : {st.session_state.score_x} - {st.session_state.score_o}"
     elif winner == 'O':
-        st.session_state.score_o += 1
-        st.markdown('<div class="result-banner">O GAGNANT !</div>', unsafe_allow_html=True)
+        result_msg = "MANCHE O !"
+        result_emoji = "🐔"
+        result_color = "#27ae60"
+        result_sub = f"SCORE : {st.session_state.score_x} - {st.session_state.score_o}"
     elif full:
-        st.markdown('<div class="result-banner">MATCH NUL !</div>', unsafe_allow_html=True)
+        result_msg = "MATCH NUL !"
+        result_emoji = "⚔️"
+        result_color = "#c8900a"
+        result_sub = f"SCORE : {st.session_state.score_x} - {st.session_state.score_o}"
+    else:
+        result_msg = None
+        result_sub = ""
 
+    # CSS to hide Streamlit buttons
+    st.markdown("""
+    <style>
+    .new-game-hidden, .new-game-hidden * {
+        display: none !important;
+        height: 0 !important;
+        overflow: hidden !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
     if winner or full or st.session_state.game_over:
-        col1, col2, col3 = st.columns([1, 1, 1])
-        with col2:
-            st.markdown('<div class="action-btn">', unsafe_allow_html=True)
-            if st.button("NOUVELLE PARTIE", key="new_game"):
-                reset_board()
-                st.rerun()
-            st.markdown('</div>', unsafe_allow_html=True)
+        # Hidden "Manche suivante" button
+        st.markdown('<div class="new-game-hidden">', unsafe_allow_html=True)
+        if st.button("MANCHE SUIVANTE", key="next_round"):
+            reset_board()
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        # Hidden "Nouveau duel" button
+        st.markdown('<div class="new-game-hidden">', unsafe_allow_html=True)
+        if st.button("NOUVEAU DUEL", key="new_duel"):
+            reset_duel()
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        # ====== POPUP OVERLAY + CONFETTIS via JS ======
+        is_duel_over = "true" if duel_winner else "false"
+        components.html(f"""
+        <script>
+        (function() {{
+            var doc = window.parent.document;
+            var resultMsg = "{result_msg or ''}";
+            var resultEmoji = "{result_emoji if result_msg else ''}";
+            var resultColor = "{result_color if result_msg else '#c8900a'}";
+            var resultSub = "{result_sub}";
+            var isDuelOver = {is_duel_over};
+            var COLORS = ['#f0c000','#ff6b6b','#48dbfb','#ff9ff3','#feca57','#54a0ff','#5f27cd','#01a3a4','#ff4757','#2ed573'];
+
+            function spawnConfetti(parent) {{
+                for (var c = 0; c < 60; c++) {{
+                    var conf = doc.createElement('div');
+                    var size = 4 + Math.floor(Math.random() * 8);
+                    var startX = 5 + Math.random() * 90;
+                    var startY = -10 + Math.random() * 30;
+                    var color = COLORS[Math.floor(Math.random() * COLORS.length)];
+                    var delay = Math.random() * 0.8;
+                    var dur = 1.8 + Math.random() * 2;
+                    conf.style.cssText = [
+                        'position:absolute',
+                        'left:' + startX + '%',
+                        'top:' + startY + '%',
+                        'width:' + size + 'px',
+                        'height:' + size + 'px',
+                        'background:' + color,
+                        'opacity:0',
+                        'pointer-events:none',
+                        'animation:confettiFall ' + dur + 's ease-out ' + delay + 's forwards'
+                    ].join(';');
+                    parent.appendChild(conf);
+                }}
+            }}
+
+            function clickHidden(btnText) {{
+                var hiddenWrappers = doc.querySelectorAll('.new-game-hidden');
+                hiddenWrappers.forEach(function(w) {{
+                    w.style.cssText = 'display:block!important;height:auto!important;';
+                }});
+                var allBtns = doc.querySelectorAll('button');
+                for (var i = 0; i < allBtns.length; i++) {{
+                    if (allBtns[i].textContent.trim() === btnText) {{
+                        allBtns[i].click();
+                        break;
+                    }}
+                }}
+            }}
+
+            function showPopup() {{
+                if (!resultMsg) return;
+                if (doc.getElementById('game-over-popup')) return;
+
+                if (!doc.getElementById('popup-style')) {{
+                    var st = doc.createElement('style');
+                    st.id = 'popup-style';
+                    st.textContent = [
+                        '@keyframes popupIn {{ 0% {{ opacity:0; transform:scale(0.6) translateY(30px); }} 100% {{ opacity:1; transform:scale(1) translateY(0); }} }}',
+                        '@keyframes confettiFall {{ 0% {{ opacity:1; transform:translateY(0) rotate(0deg); }} 100% {{ opacity:0; transform:translateY(200px) rotate(720deg); }} }}'
+                    ].join(' ');
+                    doc.head.appendChild(st);
+                }}
+
+                // Overlay
+                var overlay = doc.createElement('div');
+                overlay.id = 'game-over-popup';
+                overlay.style.cssText = [
+                    'position:fixed','top:0','left:0','width:100vw','height:100vh',
+                    'background:rgba(10,5,2,0.78)',
+                    'backdrop-filter:blur(6px)','-webkit-backdrop-filter:blur(6px)',
+                    'display:flex','align-items:center','justify-content:center',
+                    'z-index:99999','font-family:\\'Press Start 2P\\',monospace',
+                    'overflow:hidden'
+                ].join(';');
+
+                if (isDuelOver) spawnConfetti(overlay);
+
+                // Box
+                var box = doc.createElement('div');
+                box.style.cssText = [
+                    'position:relative','z-index:2','background:#1a0f08',
+                    'border:4px solid ' + resultColor,
+                    'box-shadow:0 0 50px ' + resultColor + '88, inset 0 0 20px rgba(0,0,0,0.8)',
+                    'padding:32px 44px','text-align:center','min-width:320px',
+                    'animation:popupIn 0.35s cubic-bezier(0.34,1.56,0.64,1) forwards'
+                ].join(';');
+
+                // Emoji
+                var emojiEl = doc.createElement('div');
+                emojiEl.style.cssText = 'font-size:' + (isDuelOver ? '60px' : '44px') + ';margin-bottom:12px;line-height:1;';
+                emojiEl.textContent = resultEmoji;
+
+                // Title
+                var title = doc.createElement('div');
+                title.style.cssText = 'font-size:' + (isDuelOver ? '13px' : '12px') + ';color:' + resultColor + ';text-shadow:2px 2px #000;margin-bottom:6px;letter-spacing:1px;line-height:1.5;';
+                title.textContent = resultMsg;
+
+                // Sub
+                var sub = doc.createElement('div');
+                sub.style.cssText = 'font-size:7px;color:#a08040;margin-bottom:24px;letter-spacing:1px;';
+                sub.textContent = resultSub;
+
+                // Button(s)
+                var btnRow = doc.createElement('div');
+                btnRow.style.cssText = 'display:flex;gap:10px;justify-content:center;flex-wrap:wrap;';
+
+                function makeBtn(label, action, primary) {{
+                    var btn = doc.createElement('button');
+                    btn.textContent = label;
+                    btn.style.cssText = [
+                        'font-family:\\'Press Start 2P\\',monospace','font-size:8px',
+                        'background:' + (primary ? '#5a3a10' : '#1a2a10'),
+                        'color:#f0d080',
+                        'border:3px solid ' + (primary ? '#c8900a' : '#4a8a20'),
+                        'padding:10px 16px','cursor:pointer','letter-spacing:1px','transition:background 0.15s'
+                    ].join(';');
+                    btn.onmouseover = function() {{ this.style.opacity = '0.8'; }};
+                    btn.onmouseout  = function() {{ this.style.opacity = '1'; }};
+                    btn.onclick = function() {{
+                        var pop = doc.getElementById('game-over-popup');
+                        if (pop) pop.remove();
+                        var winLine = doc.getElementById('win-line-svg');
+                        if (winLine) winLine.remove();
+                        action();
+                    }};
+                    return btn;
+                }}
+
+                if (isDuelOver) {{
+                    btnRow.appendChild(makeBtn('► NOUVEAU DUEL', function() {{ clickHidden('NOUVEAU DUEL'); }}, true));
+                }} else {{
+                    btnRow.appendChild(makeBtn('► MANCHE SUIVANTE', function() {{ clickHidden('MANCHE SUIVANTE'); }}, true));
+                    btnRow.appendChild(makeBtn('↺ ABANDON', function() {{ clickHidden('NOUVEAU DUEL'); }}, false));
+                }}
+
+                box.appendChild(emojiEl);
+                box.appendChild(title);
+                box.appendChild(sub);
+                box.appendChild(btnRow);
+                overlay.appendChild(box);
+                doc.body.appendChild(overlay);
+            }}
+
+            setTimeout(showPopup, 600);
+        }})();
+        </script>
+        """, height=0)

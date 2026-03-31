@@ -163,7 +163,7 @@ new_code.append(functions)
 
 for line in bottom_lines:
     if line.strip() == "":
-        new_code.append("\\n")
+        new_code.append("\n")
     else:
         new_code.append("    " + line)
 
