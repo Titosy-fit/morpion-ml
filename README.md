@@ -3,6 +3,8 @@
 Institut Supérieur Polytechnique de Madagascar (ISPM)  
 [www.ispm-edu.com](https://www.ispm-edu.com)
 
+
+
 Master 1 — Semestre 1 — Machine Learning  
 Hackathon Final Exam — ESIIA4 · IGGLIA4 · IMTICIA4 · ISAIA4
 
@@ -34,6 +36,11 @@ Nous avons :
 L’objectif final était d’obtenir une IA qui évalue intelligemment chaque position et joue de manière quasi-optimale.
 
 Vidéo de présentation  : Lien  https://drive.google.com/file/d/1LZH3pgYCETuEQhCLY2L5xhczSyPNOXVY/view?usp=drive_link
+
+#LANCEMENT DU PROJET 
+streamlit run src/game/game.pyx 
+
+  
 
 ---
 
